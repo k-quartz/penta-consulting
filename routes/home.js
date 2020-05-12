@@ -8,254 +8,169 @@ router.get("/", UserAuthenticate.method(), (req, res) => {
   res.send("home");
 });
 
-//router.get("/",jwtAuth,(req,res)=>{
+// This it to do the simple count sql queries --------------------------------------------------------------------------
+function execute_formatted_count_sql_query(query_string, count_property_id) {
+  new Promise(function (resolve, reject) {
+    conn.query(
+      query_string
+      ,
+      (error, data) => {
+        if (error) {
+          return reject(error);
+        }
+        ret_val = data[0][count_property_id];
+        resolve(ret_val);
+      }
+    );
+  });
+}
+
+// router.get("/count", (req,res)=>{ -----------------------------------------------------------------------------------
 router.get("/count", (req, res) => {
   let agentid = 1;
 
   var promises = [];
 
   //Get Total Inquiry
-  inquiry_total = 0;
-  var prom1 = new Promise(function (resolve, reject) {
-    conn.query(
-      "select count(candidateid) as inquiry_total from candidate where enrolled=0 and statusid in(0,1) and clid=" +
-        agentid +
-        "",
-      (error, data) => {
-        if (error) {
-          return reject(error);
-        }
-        inquiry_total = data[0].inquiry_total;
-        resolve(inquiry_total);
-      }
-    );
-  });
+  var prom1 = execute_formatted_count_sql_query(
+    `select count(candidateid) as inquiry_total 
+      from candidate 
+      where 
+        enrolled=0 and 
+        statusid in(0,1) and 
+        clid='${agentid}'`,
+    'inquiry_total'
+  )
+    
   promises.push(prom1);
 
-  // Get Last month Inquiry
+  // Get Last month Inquiry --------------------------------------------------------------------------------------------
   let fd = "2000/01/01";
   let td = "2020/01/01";
-  var last_MN_inquiry = 0;
-  prom2 = new Promise(function (resolve, reject) {
-    conn.query(
-      "select count(candidateid) as inquiry from candidate where enrolled=0 and candidatedt between STR_TO_DATE('" +
-        fd +
-        "','%Y/%m/%d') and STR_TO_DATE('" +
-        td +
-        "','%Y/%m/%d') and clid=" +
-        agentid +
-        "",
-      (error, data) => {
-        if (error) {
-          return reject(error);
-        }
-        last_MN_inquiry = data[0].inquiry;
-        resolve(last_MN_inquiry);
-      }
-    );
-  });
+  prom2 = execute_formatted_count_sql_query(
+    `select count(candidateid) as inquiry 
+        from candidate 
+        where 
+          enrolled=0 and 
+          candidatedt between STR_TO_DATE('${fd}','%Y/%m/%d') and STR_TO_DATE('${td}','%Y/%m/%d') and 
+          clid='${agentid}'`,
+    'inquiry'
+  )
+
   promises.push(prom2);
 
-  // Get Total Enrollment
-  var total_enrollment = 0;
-  prom3 = new Promise(function (resolve, reject) {
-    conn.query(
-      "select count(candidateid) as total_enrollment from candidate where enrolled=1 and clid=" +
-        agentid +
-        "",
-      (error, data) => {
-        if (error) {
-          return reject(error);
-        }
-        total_enrollment = data[0].total_enrollment;
-        resolve(total_enrollment);
-      }
-    );
-  });
+  // Get Total Enrollment ----------------------------------------------------------------------------------------------
+  prom3 = execute_formatted_count_sql_query(
+    `select count(candidateid) as total_enrollment from candidate where enrolled=1 and clid='${agentid}'`,
+    'total_enrollment'
+  )
+
   promises.push(prom3);
 
-  // Get Last Month Enrollment
-  var last_mn_enrollment = 0;
-  prom4 = new Promise(function (resolve, reject) {
-    conn.query(
-      "select count(candidateid) as last_mn_enrollment from candidate where enrolled=1 and candidatedt between STR_TO_DATE('" +
-        fd +
-        "','%Y/%m/%d') and STR_TO_DATE('" +
-        td +
-        "','%Y/%m/%d') and clid=" +
-        agentid +
-        "",
-      (error, data) => {
-        if (error) {
-          return reject(error);
-        }
-        last_mn_enrollment = data[0].last_mn_enrollment;
-        resolve(last_mn_enrollment);
-      }
-    );
-  });
+  // Get Last Month Enrollment -----------------------------------------------------------------------------------------
+  prom4 = execute_formatted_count_sql_query(
+    `select count(candidateid) as last_mn_enrollment 
+        from candidate 
+        where 
+          enrolled=1 and 
+          candidatedt between STR_TO_DATE('${fd}','%Y/%m/%d') and STR_TO_DATE('${td}','%Y/%m/%d') and 
+          clid='${agentid}'`,
+    'last_mn_enrollment'
+  )
+  
   promises.push(prom4);
 
-  // Get Pending Followup
-  var pending_followup = 0;
-  prom5 = new Promise(function (resolve, reject) {
-    conn.query(
-      "select candidateid from candidate where enrolled=0 and clid=" +
-        agentid +
-        " and statusid in(0,1)",
-      (error, data) => {
-        if (error) {
-          return reject(error);
-        }
-        let cnt = 0;
-        for (var i = 0; i < data.length; i++) {
-          var candid = data[i].candidateid;
-          conn.query(
-            "select count(candidateid) as no_of_followup from enrolfollow where candidateid=" +
-              candid +
-              "",
-            (error1, data1) => {
-              if (error1) {
-                res.send(error);
-              }
-              let no_of_followup = data1[0].no_of_followup;
-
-              if (no_of_followup < 6) {
-                cnt = cnt + 1;
-              }
-            }
-          );
-        }
-        pending_followup = cnt;
-        resolve(pending_followup);
-      }
-    );
-  });
+  // Get Pending Followup ----------------------------------------------------------------------------------------------
+  prom5 =  execute_formatted_count_sql_query(
+    `select 
+        COUNT(cd.candidateid) as no_of_followup 
+    from candidate cd 
+    inner join enrolfollow ef 
+        on ef.candidateid = cd.candidateid 
+    where 
+        cd.enrolled=0 and 
+        cd.clid='${agentid}' and 
+        cd.statusid in(0,1)`,
+    'no_of_followup'
+  ) 
   promises.push(prom5);
 
-  // Get Today's Followup
-  var Today_followup = 0;
-  prom6 = new Promise(function (resolve, reject) {
-    conn.query(
-      "select candidateid from candidate where enrolled=0 and clid=" +
-        agentid +
-        " and statusid in(0,1)",
-      (error, data) => {
-        if (error) {
-          return reject(error);
-        }
-        let cnt = 0;
-        let ts = Date.now();
+  // Get Today's Followup ----------------------------------------------------------------------------------------------
+  prom6 = execute_formatted_count_sql_query(
+    `select 
+        COUNT(cd.candidateid) as Today_followup 
+    from candidate cd 
+    inner join enrolfollow ef 
+        on ef.candidateid = cd.candidateid 
+    where 
+        cd.enrolled=0 and 
+        cd.clid='${agentid}' and 
+        cd.statusid in(0,1) and 
+        ef.nextfollowup=STR_TO_DATE('${curdate}', '%Y/%m/%d')`,
+    'Today_followup'
+  )
 
-        let date_ob = new Date(ts);
-        let curdate =
-          date_ob.getFullYear() +
-          "/" +
-          date_ob.getMonth() +
-          "/" +
-          date_ob.getDate();
-        for (var i = 0; i < data.length; i++) {
-          var candid = data[i].candidateid;
-          conn.query(
-            "select count(candidateid) as no_of_followup from enrolfollow where candidateid=" +
-              candid +
-              " and nextfollowup=STR_TO_DATE('" +
-              curdate +
-              "','%Y/%m/%d')",
-            (error1, data1) => {
-              if (error1) {
-                return reject(error);
-              }
-              let no_of_followup = data1[0].no_of_followup;
-
-              if (no_of_followup < 6) {
-                cnt = cnt + 1;
-              }
-            }
-          );
-        }
-        Today_followup = cnt;
-        resolve(Today_followup);
-      }
-    );
-  });
   promises.push(prom6);
 
-  //University List Status
-  var last_mn_enrollment = 0;
-  let unv_finalising_pend = 0; // university list which is pending to be finalised
-  prom7 = new Promise(function (resolve, reject) {
-    let unv_cnt = 0; // university count
-    let ul_ps_cand = 0; //university list pending to send to candidate
-    let st_fa_pend = 0; //university list pending to send to final authority pending
-    conn.query(
-      "select candidateid from candidate where enrolled=1 and clid=" +
-        agentid +
-        "",
-      (error, data) => {
-        if (error) {
-          return reject(error);
-        }
 
-        for (i = 0; i < data.length; i++) {
-          candid = data[i].candidateid;
-          conn.query(
-            "select count(universitylistid) as university_cnt from uniliststat where candidateid=" +
-              candid +
-              "",
-            (error1, data1) => {
-              if (error1) {
-                return reject(error);
-              }
-              unv_cnt = data1[0].university_cnt;
 
-              if (unv_cnt === 0) {
-                unv_finalising_pend = unv_finalising_pend + 1;
-                console.log("unv_finalising_pend" + unv_finalising_pend);
-              }
-
-              conn.query(
-                "select count(universitylistid) as university_cnt from uniliststat where candidateid=" +
-                  candid +
-                  " and sendtocand=0",
-                (error1, data1) => {
-                  if (error1) {
-                    return reject(error);
-                  }
-                  unv_cnt = data[0].university_cnt;
-
-                  if (unv_cnt === 0) {
-                    ul_ps_cand = ul_ps_cand + 1;
-                  }
-                }
-              );
-
-              conn.query(
-                "select count(universitylistid) as university_cnt from uniliststat where candidateid=" +
-                  candid +
-                  " and sendtovaibhav=0",
-                (error1, data1) => {
-                  if (error1) {
-                    return reject(error);
-                  }
-                  unv_cnt = data[0].university_cnt;
-
-                  if (unv_cnt === 0) {
-                    st_fa_pend = st_fa_pend + 1;
-                  }
-                }
-              );
-            }
-          );
-        }
-        last_mn_enrollment = data[0].last_mn_enrollment;
-        resolve(last_mn_enrollment);
-      }
-    );
-  });
+  // Get unv_finalising_pend what ever ---------------------------------------------------------------------------------
+  prom7 = execute_formatted_count_sql_query(
+    `select 
+        count(cd.candidateid) as unv_finalising_pend 
+    from candidate cd 
+    inner join uniliststat uls 
+        on cd.candidateid = uls.candidateid 
+    where 
+        cd.enrolled=1 and cd.clid='${agentid}'`,
+    'unv_finalising_pend'
+  )
   promises.push(prom7);
 
-  //Data for pending fees
+  // Get ul_ps_cand what ever ------------------------------------------------------------------------------------------
+  prom8 = execute_formatted_count_sql_query(
+    `select 
+        count(cd.candidateid) as ul_ps_cand
+    from candidate cd 
+    inner join uniliststat uls 
+        on cd.candidateid = uls.candidateid 
+    where 
+        cd.enrolled=1 and 
+        cd.clid='${agentid}' and 
+        sendtocand=0`,
+    'ul_ps_cand'
+  )
+  promises.push(prom8);
+
+  // Get ul_ps_cand what ever ------------------------------------------------------------------------------------------
+  prom9 = execute_formatted_count_sql_query(
+    `select 
+        count(cd.candidateid) as st_fa_pend 
+    from candidate cd 
+    inner join uniliststat uls 
+        on cd.candidateid = uls.candidateid 
+    where 
+        cd.enrolled=1 and 
+        cd.clid='${agentid}' and 
+        sendtovaibhav=0`,
+    'st_fa_pend'
+  )
+  promises.push(prom9);
+
+  
+  // Visa fees pending count -------------------------------------------------------------------------------------------
+  prom10 = execute_formatted_count_sql_query(
+    `select count(candvisaid) as visa_fee_cnt 
+    from candvisa 
+    where 
+      visafees=0 and 
+      candidateid in (select candidateid from candidate where enrolled=1 and clid='${agentid}')`,
+    'visa_fee_cnt'
+  )
+  
+  promises.push(prom10);
+
+  //Data for pending fees ----------------------------------------------------------------------------------------------
   let cand_cnt = 0;
   conn.query(
     "select candidateid from candidate where enrolled=1 and clid=" +
@@ -331,36 +246,21 @@ router.get("/count", (req, res) => {
     }
   );
 
-  //Visa fees pending count
-  var visa_fee_cnt = 0;
-  prom10 = new Promise(function (resolve, reject) {
-    conn.query(
-      "select count(candvisaid) as visa_fee_cnt from candvisa where visafees=0 and candidateid in (select candidateid from candidate where enrolled=1 and clid=" +
-        agentid +
-        ")",
-      (error, data) => {
-        if (error) {
-          return reject(error);
-        }
-        visa_fee_cnt = data[0].visa_fee_cnt;
-        resolve(visa_fee_cnt);
-      }
-    );
-  });
-  promises.push(prom10);
 
   Promise.all(promises)
-    .then(function () {
-      console.log("inquiry total=" + inquiry_total);
+    .then(function (promise_returns) {
+      console.log("inquiry total=" + promise_returns[0]);
       res.send({
-        inquiry_total: inquiry_total,
-        last_MN_inquiry: last_MN_inquiry,
-        total_enrollment: total_enrollment,
-        last_mn_enrollment: last_mn_enrollment,
-        pending_followup: pending_followup,
-        Today_followup: Today_followup,
-        visa_fee_cnt: visa_fee_cnt,
-        user_pending: unv_finalising_pend,
+        inquiry_total: promise_returns[0],
+        last_MN_inquiry: promise_returns[1],
+        total_enrollment: promise_returns[2],
+        last_mn_enrollment: promise_returns[3],
+        pending_followup: promise_returns[4],
+        Today_followup: promise_returns[5],        
+        user_pending: promise_returns[6],
+        st_fa_pend: promise_returns[7],
+        st_fa_pend: promise_returns[8],
+        visa_fee_cnt: promise_returns[9],
       });
     })
     .catch((error) => {
